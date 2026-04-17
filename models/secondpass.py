@@ -29,15 +29,14 @@ def fit_categorical_model(df):
     Fits a hierarchical DDM treating cue_type as distinct categories.
     Bias (z) is omitted, defaulting to a fixed 0.5.
     """
-    # --- MODIFIED FOR OSCAR: Removed [0:5] to use the full dataset ---
-    # Isolate the first 5 subjects for local testing (Comment retained)
-    # subjects = df['subject'].unique()[0:5]
-    # subset_data = df[df['subject'].isin(subjects)].copy()
-    subset_data = df.copy() # Using full dataset for OSCAR
+    # --- MODIFIED FOR OSCAR: Limit to first 50 subjects ---
+    # Isolate the first 50 subjects for modeling
+    subjects = df['subject'].unique()[0:50]
+    subset_data = df[df['subject'].isin(subjects)].copy()
     
     print("\n" + "="*50)
     # --- MODIFIED FOR OSCAR: Updated print statement ---
-    print(" Fitting Categorical Regression Model (Full Dataset)")
+    print(f" Fitting Categorical Regression Model ({len(subjects)} Subjects)")
     print("="*50)
     
     # Initialize the categorical model
@@ -63,15 +62,14 @@ def fit_continuous_model(df):
     Fits a hierarchical DDM treating the incentive as a continuous linear predictor.
     Bias (z) is omitted, defaulting to a fixed 0.5.
     """
-    # --- MODIFIED FOR OSCAR: Removed [0:5] to use the full dataset ---
-    # Isolate the first 5 subjects for local testing (Comment retained)
-    # subjects = df['subject'].unique()[0:5]
-    # subset_data = df[df['subject'].isin(subjects)].copy()
-    subset_data = df.copy() # Using full dataset for OSCAR
+    # --- MODIFIED FOR OSCAR: Limit to first 50 subjects ---
+    # Isolate the first 50 subjects for modeling
+    subjects = df['subject'].unique()[0:50]
+    subset_data = df[df['subject'].isin(subjects)].copy()
     
     print("\n" + "="*50)
     # --- MODIFIED FOR OSCAR: Updated print statement ---
-    print(" Fitting Continuous Regression Model (Full Dataset)")
+    print(f" Fitting Continuous Regression Model ({len(subjects)} Subjects)")
     print("="*50)
     
     # Initialize the continuous model
