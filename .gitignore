@@ -1,0 +1,12 @@
+# Ignore datasets
+data/
+
+# Ignore OSCAR batch outputs
+*.txt
+
+# Ignore saved plots (optional, but keeps repo clean)
+*.png
+
+# Ignore Python cache
+__pycache__/
+.DS_Store
