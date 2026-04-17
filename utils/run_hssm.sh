@@ -13,6 +13,11 @@ module load anaconda3/2023.09-0
 source activate hssm_env
 
 # 3. Run the scripts
-# (Assuming your terminal is in the HSSM folder when you submit the job)
-python ddm/preprocessing.py
-python ddm/secondpass.py
+# (Assuming your terminal is in the utils folder when you submit the job)
+
+# Run data cleaning (located right here in the utils folder)
+python preprocessing.py
+
+# Step back up to the main repo folder, then down into models
+cd ../models
+python secondpass.py

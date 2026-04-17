@@ -74,3 +74,8 @@ def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleane
     print(f"SUCCESS: Cleaned data saved to '{output_path}'")
     
     return df_clean
+
+# --- ADDED: Execution Block ---
+if __name__ == "__main__":
+    # This ensures the function actually runs when SLURM calls `python preprocessing.py`
+    df = load_and_clean_mid_data()
