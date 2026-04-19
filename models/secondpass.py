@@ -73,8 +73,8 @@ def plot_model_posteriors(model, model_name="Model", subject_id=""):
     """
     print(f"\nGenerating plots for {model_name} (Subject {subject_id})...")
     
-    # --- MODIFIED FOR OSCAR: Added subject ID prefix for file saving ---
-    file_prefix = f"Sub_{subject_id}_{model_name.replace(' ', '_')}"
+    # --- MODIFIED: Routing to your Git-tracked plots folder ---
+    file_prefix = f"plots/Sub_{subject_id}_{model_name.replace(' ', '_')}"
     
     # 1. Plot the marginal posteriors for the global intercepts
     # This shows the confidence range for the group average of each parameter
@@ -104,7 +104,7 @@ def plot_model_posteriors(model, model_name="Model", subject_id=""):
     plt.savefig(f"{file_prefix}_tradeoffs.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"Saved plots for {model_name} (Subject {subject_id}).")
+    print(f"Saved plots for {model_name} (Subject {subject_id}) into models/plots/.")
 
 if __name__ == "__main__":
     # --- MODIFIED FOR ARRAY JOB: Grab the array task ID passed from SLURM ---

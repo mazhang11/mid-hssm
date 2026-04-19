@@ -18,7 +18,12 @@ source activate hssm_env
 
 # Run data cleaning ONLY on the very first array task to prevent file read/write collisions
 if [ $SLURM_ARRAY_TASK_ID -eq 0 ]; then
+    echo "Task 0: Running preprocessing..."
     python preprocessing.py
+else
+    # Give Task 0 a 30-second head start to finish creating the cleaned CSV
+    echo "Task $SLURM_ARRAY_TASK_ID: Waiting 30 seconds for Task 0 to finish preprocessing..."
+    sleep 30
 fi
 
 # Step back up to the main repo folder, then down into models
