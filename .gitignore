@@ -10,3 +10,6 @@ data/
 # Ignore Python cache
 __pycache__/
 .DS_Store
+
+# Ignore logs
+utils/logs/*.txt

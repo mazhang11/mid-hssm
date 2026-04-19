@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 import hssm
 import arviz as az
@@ -24,82 +25,56 @@ def prepare_continuous_covariates(data_path="../data/mid_data_cleaned_hssm.csv")
     
     return df
 
-def fit_categorical_model(df):
+def fit_continuous_model(df, subject_idx):
     """
-    Fits a hierarchical DDM treating cue_type as distinct categories.
+    Fits a DDM treating the incentive as a continuous linear predictor.
     Bias (z) is omitted, defaulting to a fixed 0.5.
     """
-    # --- MODIFIED FOR OSCAR: Limit to first 50 subjects ---
-    # Isolate the first 50 subjects for modeling
-    subjects = df['subject'].unique()[0:50]
-    subset_data = df[df['subject'].isin(subjects)].copy()
+    # --- MODIFIED FOR ARRAY JOB: Isolate exactly ONE subject based on the array ID ---
+    all_subjects = df['subject'].unique()
+    
+    # Safety check: if the array ID is larger than our number of subjects, exit cleanly
+    if subject_idx >= len(all_subjects):
+        print(f"Task ID {subject_idx} is out of bounds (only {len(all_subjects)} subjects). Exiting.")
+        sys.exit(0)
+        
+    target_subject = all_subjects[subject_idx]
+    subset_data = df[df['subject'] == target_subject].copy()
     
     print("\n" + "="*50)
     # --- MODIFIED FOR OSCAR: Updated print statement ---
-    print(f" Fitting Categorical Regression Model ({len(subjects)} Subjects)")
-    print("="*50)
-    
-    # Initialize the categorical model
-    # C(cue_type) forces the model to estimate distinct shifts for each category
-    categorical_model = hssm.HSSM(
-        data=subset_data,
-        model="ddm",
-        include=[
-            {"name": "v", "formula": "v ~ 1 + C(cue_type) + (1 + C(cue_type)|subject)"},
-            {"name": "a", "formula": "a ~ 1 + (1|subject)"},
-            {"name": "t", "formula": "t ~ 1 + (1|subject)"}
-            # z is omitted, so it defaults to fixed 0.5 and will not update
-        ]
-    )
-    
-    # --- MODIFIED FOR OSCAR: Increased chains and cores to 4 ---
-    categorical_model.sample(tune=1000, draws=1000, chains=4, cores=4)
-    print("Finished sampling categorical model.")
-    return categorical_model
-
-def fit_continuous_model(df):
-    """
-    Fits a hierarchical DDM treating the incentive as a continuous linear predictor.
-    Bias (z) is omitted, defaulting to a fixed 0.5.
-    """
-    # --- MODIFIED FOR OSCAR: Limit to first 50 subjects ---
-    # Isolate the first 50 subjects for modeling
-    subjects = df['subject'].unique()[0:50]
-    subset_data = df[df['subject'].isin(subjects)].copy()
-    
-    print("\n" + "="*50)
-    # --- MODIFIED FOR OSCAR: Updated print statement ---
-    print(f" Fitting Continuous Regression Model ({len(subjects)} Subjects)")
+    print(f" Fitting Continuous Regression Model (Single Subject: {target_subject})")
     print("="*50)
     
     # Initialize the continuous model
     # 'cue_value' is numerical, so the model calculates a single slope (beta weight)
     # for how much v increases per $1 increase in reward.
+    # NOTE: Random effects like (1|subject) are removed because we are fitting one individual.
     continuous_model = hssm.HSSM(
         data=subset_data,
         model="ddm",
         include=[
-            {"name": "v", "formula": "v ~ 1 + cue_value + (1 + cue_value|subject)"},
-            {"name": "a", "formula": "a ~ 1 + (1|subject)"},
-            {"name": "t", "formula": "t ~ 1 + (1|subject)"}
+            {"name": "v", "formula": "v ~ 1 + cue_value"}, 
+            {"name": "a", "formula": "a ~ 1"},
+            {"name": "t", "formula": "t ~ 1"}
             # z is omitted, so it defaults to fixed 0.5 and will not update
         ]
     )
     
     # --- MODIFIED FOR OSCAR: Increased chains and cores to 4 ---
     continuous_model.sample(tune=1000, draws=1000, chains=4, cores=4)
-    print("Finished sampling continuous model.")
-    return continuous_model
+    print(f"Finished sampling continuous model for subject {target_subject}.")
+    return continuous_model, target_subject
 
-def plot_model_posteriors(model, model_name="Model"):
+def plot_model_posteriors(model, model_name="Model", subject_id=""):
     """
     Uses ArviZ to plot marginal posteriors and pair plots 
     to visually inspect parameter estimates and tradeoffs.
     """
-    print(f"\nGenerating plots for {model_name}...")
+    print(f"\nGenerating plots for {model_name} (Subject {subject_id})...")
     
-    # --- MODIFIED FOR OSCAR: Added prefix generation for file saving ---
-    file_prefix = model_name.replace(" ", "_")
+    # --- MODIFIED FOR OSCAR: Added subject ID prefix for file saving ---
+    file_prefix = f"Sub_{subject_id}_{model_name.replace(' ', '_')}"
     
     # 1. Plot the marginal posteriors for the global intercepts
     # This shows the confidence range for the group average of each parameter
@@ -107,7 +82,7 @@ def plot_model_posteriors(model, model_name="Model"):
         model.traces, 
         var_names=['v_Intercept', 'a_Intercept', 't_Intercept']
     )
-    plt.suptitle(f"{model_name}: Marginal Posteriors")
+    plt.suptitle(f"{model_name} (Sub {subject_id}): Marginal Posteriors")
     
     # --- MODIFIED FOR OSCAR: Swapped plt.show() for plt.savefig() and plt.close() ---
     # plt.show()
@@ -122,23 +97,26 @@ def plot_model_posteriors(model, model_name="Model"):
         kind='kde', 
         marginals=True
     )
-    plt.suptitle(f"{model_name}: Tradeoff Check (v vs a)")
+    plt.suptitle(f"{model_name} (Sub {subject_id}): Tradeoff Check (v vs a)")
     
     # --- MODIFIED FOR OSCAR: Swapped plt.show() for plt.savefig() and plt.close() ---
     # plt.show()
     plt.savefig(f"{file_prefix}_tradeoffs.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"Saved plots for {model_name}.")
+    print(f"Saved plots for {model_name} (Subject {subject_id}).")
 
 if __name__ == "__main__":
+    # --- MODIFIED FOR ARRAY JOB: Grab the array task ID passed from SLURM ---
+    if len(sys.argv) > 1:
+        subject_idx = int(sys.argv[1])
+    else:
+        # Fallback for testing locally without an array ID
+        subject_idx = 0 
+        
     # 1. Load data and create the continuous covariate column
     df = prepare_continuous_covariates()
     
-    # 2. Fit Categorical Model
-    # categorical_model = fit_categorical_model(df)
-    # plot_model_posteriors(categorical_model, "Categorical Model")
-    
-    # 3. Fit Continuous Model
-    continuous_model = fit_continuous_model(df)
-    plot_model_posteriors(continuous_model, "Continuous Model")
+    # 3. Fit Continuous Model for this specific subject
+    continuous_model, subject_id = fit_continuous_model(df, subject_idx)
+    plot_model_posteriors(continuous_model, "Continuous Model", subject_id)
