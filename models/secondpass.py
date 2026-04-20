@@ -14,11 +14,11 @@ def prepare_continuous_covariates(data_path="../data/mid_data_cleaned_hssm.csv")
     
     # Map categorical cue strings to continuous numerical values
     cue_mapping = {
-        'NoIncentive': 0.0,
-        'Quarters': 0.5,
-        'Dollar': 1.0,
-        'FiveDollars': 5.0
-    }
+      'neutral': 0.0,
+      'small_reward': 0.5,
+      'medium_reward': 1.0,
+      'large_reward': 5.0
+    } 
     
     df['cue_value'] = df['cue_type'].map(cue_mapping)
     print("Successfully mapped continuous covariates.")

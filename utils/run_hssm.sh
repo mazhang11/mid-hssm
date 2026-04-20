@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_array
-#SBATCH --time=1:00:00           # Gives it 1 hour to run 
+#SBATCH --time=12:00:00           # Gives it 12 hours to run 
 #SBATCH --mem=8G                  # Reduced to 8GB since it is only 1 subject
 #SBATCH --cpus-per-task=4         # Requests 4 CPUs (matches cores=4 in python)
 #SBATCH --array=0-49              # Creates 50 simultaneous jobs (IDs 0 through 49)
