@@ -3,19 +3,17 @@ import glob
 import pandas as pd
 import hssm
 
+# This file reads all the individual csv files for each subject and extracts the columns we want,
+# congregating them all in a new csv with subject name as a column. 
+
 def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleaned_hssm.csv"):
     """
     Reads a directory of MID task CSV files, gets subject, cue_type, RT, out_type columns. Converts the 
     'out_type' column into a binary HSSM 'response', cleans the data, and saves the output in new csv in same path. 
     """
-    # 1. Check if the clean data already exists
+    # 1. Define output path (always re-run preprocessing)
     output_path = os.path.join(data_dir, output_filename)
-    if os.path.exists(output_path):
-        print(f"Cleaned dataset found at '{output_path}'.")
-        print("Skipping preprocessing and loading directly...")
-        return pd.read_csv(output_path)
-        
-    print(f"No cleaned dataset found. Searching for raw CSV files in '{data_dir}'...")
+    print(f"Searching for raw CSV files in '{data_dir}'...")
     
     # 2. Find all raw CSV files (excluding our output file)
     csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
@@ -64,7 +62,17 @@ def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleane
     
     final_row_count = len(df_clean)
     
-    # 8. Save the cleaned data
+    # 8. Map categorical cue strings to continuous numerical values
+    cue_mapping = {
+      'neutral': 0.0,
+      'small_reward': 0.5,
+      'medium_reward': 1.0,
+      'large_reward': 5.0
+    } 
+    df_clean['cue_value'] = df_clean['cue_type'].map(cue_mapping)
+    print("Successfully mapped continuous covariates.")
+    
+    # 9. Save the cleaned data
     df_clean.to_csv(output_path, index=False)
     
     print(f"\nData cleaning complete")
