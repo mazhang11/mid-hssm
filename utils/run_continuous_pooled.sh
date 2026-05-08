@@ -1,8 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_pooled
-#SBATCH --account=ccv-frankmj
-#SBATCH -p gpu                    # Explicitly use the 'gpu' partition
-#SBATCH --nodes=1                 # Silences the "No max_nodes specified" warning
+#SBATCH -p l40s-gcondo            # Use the L40s GPU partition
 #SBATCH --gres=gpu:1              # Requests 1 GPU
 #SBATCH --time=24:00:00           # Pooled models take much longer to sample
 #SBATCH --mem=32G                 # Increased memory to hold traces for all subjects

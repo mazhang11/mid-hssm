@@ -1,9 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_array
-#SBATCH --account=ccv-frankmj
-#SBATCH -p gpu                     # CORRECTED: Use the 'gpu' partition
-#SBATCH --nodes=1                  # ADDED: Silences the "No max_nodes specified" warning
-#SBATCH --gres=gpu:1               # Request 1 GPU 
+#SBATCH -p l40s-gcondo            # Use the L40s GPU partition
+#SBATCH --gres=gpu:1              # Request 1 GPU 
 #SBATCH --time=12:00:00           # Gives it 12 hours to run 
 #SBATCH --mem=8G                  # 8GB per subject
 #SBATCH --cpus-per-task=4         # 4 CPUs for numpyro chains
