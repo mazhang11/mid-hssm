@@ -30,7 +30,10 @@ def fit_baseline_model(df, subject_idx):
         ]
     )
     show_progress = (subject_idx % 50 == 0)
-    baseline_model.sample(tune=1000, draws=1000, chains=4, cores=4, progressbar=show_progress)
+    baseline_model.sample(
+        tune=1000, draws=1000, chains=4, cores=4,
+        sampler="nuts_numpyro", progressbar=show_progress
+    )
     if subject_idx % 50 == 0:
         print(f"Finished sampling baseline model for subject {target_subject}.")
     return baseline_model
@@ -71,7 +74,10 @@ def fit_continuous_model(df, subject_idx):
     )
     
     show_progress = (subject_idx % 50 == 0)
-    continuous_model.sample(tune=1000, draws=1000, chains=4, cores=4, progressbar=show_progress)
+    continuous_model.sample(
+        tune=1000, draws=1000, chains=4, cores=4,
+        sampler="nuts_numpyro", progressbar=show_progress
+    )
     
     if subject_idx % 50 == 0:
         print(f"Finished sampling continuous model for subject {target_subject}.")

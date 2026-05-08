@@ -1,9 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_array
 #SBATCH --account=carney-mjfrank-condo2
+#SBATCH -p carney-mjfrank-condo2    # Explicitly use the condo partition
+#SBATCH --gres=gpu:1               # Request 1 GPU (condo nodes are GPU-only)
 #SBATCH --time=12:00:00           # Gives it 12 hours to run 
-#SBATCH --mem=8G                  # Reduced to 8GB since it is only 1 subject
-#SBATCH --cpus-per-task=4         # Requests 4 CPUs (matches cores=4 in python)
+#SBATCH --mem=8G                  # 8GB per subject
+#SBATCH --cpus-per-task=4         # 4 CPUs for numpyro chains
 #SBATCH --array=0-49              # Creates 50 simultaneous jobs (IDs 0 through 49)
 #SBATCH --output=logs/hssm_out_%A_%a.txt # %A is the Job ID, %a is the Array ID
 #SBATCH --error=logs/hssm_err_%A_%a.txt  
