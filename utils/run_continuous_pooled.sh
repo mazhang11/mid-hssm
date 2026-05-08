@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_pooled
-#SBATCH --account=carney-mjfrank-condo2
+#SBATCH --account=ccv-frankmj
 #SBATCH -p gpu                    # Explicitly use the 'gpu' partition
 #SBATCH --nodes=1                 # Silences the "No max_nodes specified" warning
 #SBATCH --gres=gpu:1              # Requests 1 GPU
