@@ -17,6 +17,11 @@ module load anaconda3/2023.09-0
 eval "$(conda shell.bash hook)"
 conda activate hssm_env
 
+# --- NEW FIX FOR LOCK ERRORS ---
+export PYTENSOR_FLAGS="base_compiledir=/tmp/mazhang_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+mkdir -p /tmp/mazhang_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}
+# -------------------------------
+
 # 3. Run the scripts
 # (Assuming your terminal is in the utils folder when you submit the job)
 
