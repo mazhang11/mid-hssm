@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_array
 #SBATCH --account=carney-mjfrank-condo2
-#SBATCH -p carney-mjfrank-condo2    # Explicitly use the condo partition
-#SBATCH --gres=gpu:1               # Request 1 GPU (condo nodes are GPU-only)
+#SBATCH -p gpu                     # CORRECTED: Use the 'gpu' partition
+#SBATCH --nodes=1                  # ADDED: Silences the "No max_nodes specified" warning
+#SBATCH --gres=gpu:1               # Request 1 GPU 
 #SBATCH --time=12:00:00           # Gives it 12 hours to run 
 #SBATCH --mem=8G                  # 8GB per subject
 #SBATCH --cpus-per-task=4         # 4 CPUs for numpyro chains
@@ -14,7 +15,9 @@
 module load anaconda3/2023.09-0
 
 # 2. Activate your environment 
-source activate hssm_env
+# CORRECTED: Using the proper conda hook so the script doesn't fail
+eval "$(conda shell.bash hook)"
+conda activate hssm_env
 
 # 3. Run the scripts
 # (Assuming your terminal is in the utils folder when you submit the job)

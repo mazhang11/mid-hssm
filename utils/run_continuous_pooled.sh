@@ -1,7 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=mid_hssm_pooled
 #SBATCH --account=carney-mjfrank-condo2
-#SBATCH -p gpu --gres=gpu:1       # Requests 1 GPU
+#SBATCH -p gpu                    # Explicitly use the 'gpu' partition
+#SBATCH --nodes=1                 # Silences the "No max_nodes specified" warning
+#SBATCH --gres=gpu:1              # Requests 1 GPU
 #SBATCH --time=24:00:00           # Pooled models take much longer to sample
 #SBATCH --mem=32G                 # Increased memory to hold traces for all subjects
 #SBATCH --cpus-per-task=4         # Requests 4 CPUs for 4 PyMC chains
@@ -12,7 +14,9 @@
 module load anaconda3/2023.09-0
 
 # 2. Activate your environment 
-source activate hssm_env
+# CORRECTED: Using the proper conda hook so the script doesn't fail
+eval "$(conda shell.bash hook)"
+conda activate hssm_env
 
 # We assume the cleaned CSV with covariates already exists in data/
 # Preprocessing is run manually before submitting the job.
