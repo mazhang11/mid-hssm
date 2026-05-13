@@ -164,7 +164,128 @@ def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleane
     return df_clean
 
 
+def prepare_session1_controls(data_dir="../data", output_filename="mid_session1_controls_hssm.csv"):
+    """
+    Prepares a filtered, analysis-ready dataset for the simplified success_pooled model.
+
+    Filters:
+      - Session 1 only (Phase 1 visit)
+      - Controls only  (treatment == 0, i.e. Placebo arm)
+
+    Adds:
+      - last_trial_success: 1 if the immediately preceding trial was a hit, 0 if a miss/skip.
+        Computed BEFORE out_type is dropped so we capture the actual trial outcome.
+        Defined as: out_type not in the failure set {'Miss', 'TooSlow', 'TooFast'}.
+        The first trial for each subject has last_trial_success = 0 (no prior trial).
+
+    z (starting bias) is intentionally NOT included as a covariate here — it will be fixed
+    at 0.5 in the HSSM model formulation.
+    """
+    output_path = os.path.join(data_dir, output_filename)
+    print(f"Searching for raw CSV files in '{data_dir}'...")
+
+    # 1. Find all trial CSVs (exclude outputs and summary file)
+    csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
+    csv_files = [
+        f for f in csv_files
+        if output_filename not in f
+        and "mid_patient_data_summary" not in f
+        and "mid_data_cleaned_hssm" not in f
+    ]
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found in the directory: {data_dir}")
+
+    print(f"Found {len(csv_files)} files. Combining...")
+    df_raw = pd.concat([pd.read_csv(f) for f in csv_files], ignore_index=True)
+
+    # 2. Validate required columns
+    required = ['subject', 'session', 'cue_type', 'out_type', 'RT']
+    missing = [c for c in required if c not in df_raw.columns]
+    if missing:
+        raise ValueError(f"Data is missing required columns: {missing}")
+
+    df = df_raw[required].copy()
+
+    # 3. Filter to Session 1 BEFORE joining metadata (smaller, faster merge)
+    df['session'] = pd.to_numeric(df['session'], errors='coerce')
+    df = df[df['session'] == 1].copy()
+    print(f"After Session 1 filter: {len(df)} trials.")
+
+    # 4. Join patient metadata and filter to controls (Placebo, treatment=0)
+    meta_long = load_patient_metadata(data_dir=data_dir)
+    meta_long['subject'] = meta_long['subject'].astype(df['subject'].dtype)
+    df = df.merge(meta_long, on=['subject', 'session'], how='left')
+
+    unmatched = df['treatment'].isna().sum()
+    if unmatched > 0:
+        print(f"  WARNING: {unmatched} trials had no metadata match and will be dropped.")
+    df = df.dropna(subset=['treatment'])
+    df = df[df['treatment'] == 0].copy()
+    print(f"After controls-only filter (Placebo): {len(df)} trials "
+          f"from {df['subject'].nunique()} subjects.")
+
+    # 5. Compute last_trial_success BEFORE dropping out_type.
+    #    Success = trial was a hit (not a miss or anticipatory press).
+    #    Covers common MID task naming conventions for failure outcomes.
+    failure_types = {'Miss', 'TooSlow', 'TooFast', 'miss', 'tooslow', 'toofast'}
+    df = df.reset_index(drop=True)
+    df['trial_success'] = df['out_type'].apply(
+        lambda x: 0 if str(x).strip() in failure_types else 1
+    )
+
+    # Sort by subject to ensure within-subject trial order is preserved, then shift
+    df = df.sort_values(['subject']).reset_index(drop=True)
+    df['last_trial_success'] = (
+        df.groupby('subject')['trial_success']
+          .shift(1)
+          .fillna(0)   # first trial of each subject has no prior trial → 0
+          .astype(int)
+    )
+    df = df.drop(columns=['trial_success'])
+
+    # 6. Drop TooFast outliers (anticipatory presses)
+    initial_count = len(df)
+    df = df[df['out_type'] != 'TooFast'].copy()
+
+    # 7. Convert RT to seconds and set uniform response = 1
+    df['rt'] = df['RT'] / 1000.0
+    df = df.drop(columns=['RT', 'out_type'])
+    df['response'] = 1
+
+    # 8. Final RT validity filter
+    df = df.dropna(subset=['rt', 'response'])
+    df = df[df['rt'] > 0.15].reset_index(drop=True)
+    final_count = len(df)
+
+    # 9. Map cue conditions to continuous numerical values
+    cue_mapping = {
+        'neutral':       0.0,
+        'small_reward':  0.5,
+        'medium_reward': 1.0,
+        'large_reward':  5.0
+    }
+    df['cue_value'] = df['cue_type'].map(cue_mapping)
+
+    # 10. Save
+    df.to_csv(output_path, index=False)
+
+    print(f"\nSession 1 Controls preprocessing complete")
+    print(f"  Trials before RT/TooFast filter: {initial_count}")
+    print(f"  Trials dropped:                  {initial_count - final_count}")
+    print(f"  Final usable trials:             {final_count}")
+    print(f"  Subjects:                        {df['subject'].nunique()}")
+    print(f"  Columns: {list(df.columns)}")
+    print(f"  last_trial_success distribution:\n"
+          f"{df['last_trial_success'].value_counts().to_string()}")
+    print(f"SUCCESS: Saved to '{output_path}'")
+
+    return df
+
+
 # --- Execution Block ---
 if __name__ == "__main__":
-    # This ensures the function actually runs when called directly or from SLURM
-    df = load_and_clean_mid_data()
+    # Run the full dataset preprocessing
+    df_all = load_and_clean_mid_data()
+
+    # Also run the simplified Session 1 controls preprocessing for success_pooled.py
+    df_s1 = prepare_session1_controls()
