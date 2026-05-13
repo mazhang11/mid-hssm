@@ -2,7 +2,6 @@ import os
 import re
 import glob
 import pandas as pd
-import hssm
 
 # This file reads all the individual csv files for each subject and extracts the columns we want,
 # congregating them all in a new csv with subject name as a column.
