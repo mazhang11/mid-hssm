@@ -12,7 +12,7 @@
 module load miniforge3/25.3.0-3
 
 # 2. Activate your environment
-eval "$(conda shell.bash hook)"
+source ${MAMBA_ROOT_PREFIX}/etc/profile.d/conda.sh   # per CCV docs (not conda init)
 conda activate hssm_env
 
 # Assumes cleaned_rl_model_controls.csv already exists in data/.
