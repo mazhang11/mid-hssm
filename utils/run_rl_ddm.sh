@@ -8,8 +8,8 @@
 #SBATCH --output=logs/rl_ddm_out_%j.txt
 #SBATCH --error=logs/rl_ddm_err_%j.txt
 
-# 1. Load Anaconda
-module load anaconda3/2023.09-0
+# 1. Load conda (the anaconda3 module is no longer usable on Oscar; CCV recommends miniforge3)
+module load miniforge3/25.3.0-3
 
 # 2. Activate your environment
 eval "$(conda shell.bash hook)"
