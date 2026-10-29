@@ -177,8 +177,9 @@ def plot_rt_quintiles(model, observed_df, output_dir):
     quantiles = [0.10, 0.30, 0.50, 0.70, 0.90]
     cue_labels = {0.0: "Neutral", 0.5: "Small", 1.0: "Medium", 5.0: "Large"}
 
-    # Extract posterior predictive RT samples — shape: (chain, draw, trial)
-    ppc_rt = model.traces.posterior_predictive["rt"].values
+    # Extract posterior predictive RT samples — shape: (chain, draw, trial, 2)
+    # HSSM stores rt and response together. Index 0 is RT, index 1 is Response.
+    ppc_rt = model.traces.posterior_predictive["rt,response"].values[..., 0]
     ppc_rt_flat = ppc_rt.reshape(-1, ppc_rt.shape[-1])  # (n_samples, n_trials)
 
     obs_rt  = observed_df['rt'].values

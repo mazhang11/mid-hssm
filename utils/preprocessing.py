@@ -72,7 +72,9 @@ def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleane
     csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
     csv_files = [
         f for f in csv_files
-        if output_filename not in f and "mid_patient_data_summary" not in f
+        if output_filename not in f
+        and "mid_patient_data_summary" not in f
+        and "cleaned_rl_model_controls" not in f
     ]
 
     if not csv_files:
@@ -190,6 +192,7 @@ def prepare_session1_controls(data_dir="../data", output_filename="mid_session1_
         if output_filename not in f
         and "mid_patient_data_summary" not in f
         and "mid_data_cleaned_hssm" not in f
+        and "cleaned_rl_model_controls" not in f
     ]
     if not csv_files:
         raise FileNotFoundError(f"No CSV files found in the directory: {data_dir}")
@@ -281,6 +284,115 @@ def prepare_session1_controls(data_dir="../data", output_filename="mid_session1_
     return df
 
 
+def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl_model_controls.csv"):
+    """
+    Prepares a balanced-panel dataset for the RL-DDM (hssm.RLSSM) model in models/rl_ddm.py.
+
+    Filters:
+      - Session 1 only (Phase 1 visit)
+      - Controls only  (treatment == 0, i.e. Placebo arm)
+
+    RLSSM needs every subject to have the same number of trials, contiguous and in
+    trial order, so NO trials are dropped. Instead, invalid trials (TooFast, NoResponse /
+    missing RT, rt <= 0.15 s) are kept in the learning sequence and masked out of the
+    likelihood by setting response = -1 (and a placeholder rt). This task has only one
+    possible response, so -1 never occurs naturally; the masked decision process in
+    rl_ddm.py contributes logp = 0 for those rows.
+
+    Adds:
+      - cue_idx:   0 neutral, 1 small, 2 medium, 3 large (index into the learned Q table)
+      - hit:       1 if the trial was rewarded/neutral feedback (out_type names the payout)
+      - feedback:  hit * cue_value / 5, i.e. reward received scaled to [0, 1]
+      - valid:     1 if the trial enters the likelihood, 0 if masked
+      - trial_idx: 1..N trial position within subject (across all 4 blocks)
+    """
+    output_path = os.path.join(data_dir, output_filename)
+    print(f"Searching for raw block CSV files in '{data_dir}'...")
+
+    # 1. Only the raw per-block files (never derived outputs)
+    csv_files = glob.glob(os.path.join(data_dir, "Placebo_MID_Reward_*.csv"))
+    if not csv_files:
+        raise FileNotFoundError(f"No raw block CSV files found in the directory: {data_dir}")
+
+    print(f"Found {len(csv_files)} files. Combining...")
+    df_raw = pd.concat([pd.read_csv(f) for f in csv_files], ignore_index=True)
+
+    required = ['subject', 'session', 'run', 'trial', 'cue_type', 'out_type', 'RT']
+    missing = [c for c in required if c not in df_raw.columns]
+    if missing:
+        raise ValueError(f"Data is missing required columns: {missing}")
+    df = df_raw[required].copy()
+
+    # 2. Session 1, then join metadata and keep controls (Placebo, treatment=0)
+    df['session'] = pd.to_numeric(df['session'], errors='coerce')
+    df = df[df['session'] == 1].copy()
+    print(f"After Session 1 filter: {len(df)} trials.")
+
+    meta_long = load_patient_metadata(data_dir=data_dir)
+    meta_long['subject'] = meta_long['subject'].astype(df['subject'].dtype)
+    df = df.merge(meta_long, on=['subject', 'session'], how='left')
+
+    unmatched = df['treatment'].isna().sum()
+    if unmatched > 0:
+        print(f"  WARNING: {unmatched} trials had no metadata match and will be dropped.")
+    df = df.dropna(subset=['treatment'])
+    df = df[df['treatment'] == 0].copy()
+    print(f"After controls-only filter (Placebo): {len(df)} trials "
+          f"from {df['subject'].nunique()} subjects.")
+
+    # 3. Sort into true trial order. Each raw CSV is one block (run = reward_1..reward_4),
+    #    and the learned values carry over across blocks within the session.
+    df = df.sort_values(['subject', 'run', 'trial'], kind='stable').reset_index(drop=True)
+    if df.duplicated(['subject', 'run', 'trial']).any():
+        raise ValueError("Duplicate (subject, run, trial) rows found.")
+
+    # 4. Learning covariates, computed on the full sequence
+    cue_mapping = {
+        'neutral':       0.0,
+        'small_reward':  0.5,
+        'medium_reward': 1.0,
+        'large_reward':  5.0
+    }
+    cue_index = {'neutral': 0, 'small_reward': 1, 'medium_reward': 2, 'large_reward': 3}
+    df['cue_value'] = df['cue_type'].map(cue_mapping)
+    df['cue_idx'] = df['cue_type'].map(cue_index)
+    if df['cue_idx'].isna().any():
+        raise ValueError(f"Unknown cue_type values: {df.loc[df['cue_idx'].isna(), 'cue_type'].unique()}")
+    df['cue_idx'] = df['cue_idx'].astype(int)
+
+    hit_types = {'NoIncentive', 'Quarters', 'Dollar', 'FiveDollars'}
+    df['hit'] = df['out_type'].astype(str).str.strip().isin(hit_types).astype(int)
+    df['feedback'] = df['hit'] * df['cue_value'] / 5.0
+    df['trial_idx'] = df.groupby('subject').cumcount() + 1
+
+    # 5. Mask invalid trials instead of dropping them
+    rt = df['RT'] / 1000.0
+    invalid = (df['out_type'] == 'TooFast') | rt.isna() | (rt <= 0.15)
+    df['valid'] = (~invalid).astype(int)
+    df['response'] = df['valid'].map({1: 1, 0: -1})
+    df['rt'] = rt.where(df['valid'] == 1, 1.0)   # placeholder rt for masked rows
+    df = df.drop(columns=['RT'])
+
+    # 6. Balanced-panel check
+    counts = df.groupby('subject').size()
+    if counts.nunique() != 1:
+        raise ValueError(f"Unbalanced panel: trial counts per subject = {counts.value_counts().to_dict()}")
+    masked = (1 - df['valid']).groupby(df['subject']).sum()
+
+    # 7. Save
+    df.to_csv(output_path, index=False)
+
+    print(f"\nSession 1 Controls (RL) preprocessing complete")
+    print(f"  Subjects:            {df['subject'].nunique()}")
+    print(f"  Trials per subject:  {counts.iloc[0]}")
+    print(f"  Masked trials:       {int(masked.sum())} total "
+          f"(per subject min {int(masked.min())}, max {int(masked.max())})")
+    print(f"  Columns: {list(df.columns)}")
+    print(f"SUCCESS: Saved to '{output_path}'")
+
+    return df
+
+
 # --- Execution Block ---
 if __name__ == "__main__":
     # Run the full dataset preprocessing
@@ -288,3 +400,6 @@ if __name__ == "__main__":
 
     # Also run the simplified Session 1 controls preprocessing for success_pooled.py
     df_s1 = prepare_session1_controls()
+
+    # Balanced-panel Session 1 controls dataset for the RL-DDM (rl_ddm.py)
+    df_rl = prepare_session1_controls_rl()
