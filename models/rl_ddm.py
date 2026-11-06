@@ -14,20 +14,16 @@ the drift trial by trial:
   Q_0       = 0 for every cue
 
 Decision process ("ddm_analytical_masked"):
-  hssm.likelihoods.logp_ddm_jax, the JAX port of HSSM's analytical DDM (Navarro & Fuss, 2009;
-  the same likelihood prior_success.py uses through hssm.HSSM). Exact, so there is no drift
-  cap. An earlier version used RLSSM's LAN "ddm", which is only valid for v in [-3, 3] and
-  a in [0.3, 2.5]; this data needs v ~ 7 (prior_success: v_Intercept ~ 6.9), so that fit
-  pinned a, t and v at their limits and never converged.
+  This data needs v ~ 7 (prior_success: v_Intercept ~ 6.9).
 
   Note the task has a single possible response: every real response is an upper-boundary
   hit, and the DDM can only explain the absence of lower-boundary responses with a high
-  drift. rl_wald.py models the same learner with a one-boundary (Wald) decision process.
+  drift. 
 
 Masking:
   RLSSM needs a balanced panel, so no trials are dropped (see
   preprocessing.prepare_session1_controls_rl). Invalid trials (TooFast, NoResponse,
-  rt <= 0.15 s) stay in the learning sequence with their real feedback but are coded
+  rt < 0.20 s) stay in the learning sequence with their real feedback but are coded
   response = -1 and contribute logp = 0. The built-in analytical "ddm" would score those
   rows as lower-boundary responses, hence the masked wrapper. p_outlier = 0 so they
   contribute exactly 0.
@@ -69,8 +65,7 @@ import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for headless Oscar runs
 import matplotlib.pyplot as plt
 
-# Precision: float32 by default; RL_DDM_FLOATX=float64 to test/fit in double precision
-hssm.set_floatX(os.environ.get("RL_DDM_FLOATX", "float32"), update_jax=True)
+hssm.set_floatX("float32", update_jax=True)
 
 MODEL_NAME = "mid_rw_ddm_analytical"
 DECISION_PROCESS = "ddm_analytical_masked"
@@ -230,9 +225,9 @@ def build_model(df):
     )
 
 
-def fit_rl_ddm_model(df, tune=1000, draws=1000, chains=4):
+def fit_rl_ddm_model(df, tune=1000, draws=1000, chains=4, group_label="Session 1, Controls"):
     print("\n" + "="*60)
-    print(" Fitting analytical RL-DDM (Session 1, Controls)")
+    print(f" Fitting analytical RL-DDM ({group_label})")
     print("="*60)
 
     model = build_model(df)
@@ -462,15 +457,20 @@ def plot_posterior_diagnostics(idata, output_dir):
 # Main execution
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    # 1. Load the balanced Session 1 controls dataset
-    data_path = "../data/cleaned_rl_model_controls.csv"
+def run(data_path, run_name, group_label):
+    """
+    Fits the RL-DDM on one balanced-panel dataset and writes the trace, summary and plots to
+    outputs/<run_name>_<date>_v<N> (or _Job<SLURM id>). rl_ddm_session2_placebo.py and
+    rl_ddm_session1_bupropion.py call this with their own dataset. Keep "rl_ddm_analytical"
+    in run_name: evaluate_models.py uses it to rebuild the model.
+    """
+    # 1. Load the balanced dataset
     print(f"Loading data from '{data_path}'...")
 
     if not os.path.exists(data_path):
         raise FileNotFoundError(
             f"Dataset not found at '{data_path}'. "
-            "Run: python utils/preprocessing.py  (which also calls prepare_session1_controls_rl())"
+            "Run: python utils/preprocessing.py  (which writes every cleaned_rl_model_*.csv)"
         )
 
     df = pd.read_csv(data_path)
@@ -499,9 +499,10 @@ if __name__ == "__main__":
         model = fit_rl_ddm_model(df,
                                  tune=int(os.environ.get("RL_DDM_TUNE", "300")),
                                  draws=int(os.environ.get("RL_DDM_DRAWS", "200")),
-                                 chains=int(os.environ.get("RL_DDM_CHAINS", "1")))
+                                 chains=int(os.environ.get("RL_DDM_CHAINS", "1")),
+                                 group_label=group_label)
     else:
-        model = fit_rl_ddm_model(df)
+        model = fit_rl_ddm_model(df, group_label=group_label)
     idata = model.traces
 
     # 3. Set up output directory
@@ -509,7 +510,7 @@ if __name__ == "__main__":
     script_dir   = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     base_dir     = os.path.join(project_root, "outputs",
-                                f"rl_ddm_analytical{'_smoke' if smoke else ''}_{date_str}")
+                                f"{run_name}{'_smoke' if smoke else ''}_{date_str}")
 
     job_id = os.environ.get("SLURM_JOB_ID")
     if job_id:
@@ -539,7 +540,7 @@ if __name__ == "__main__":
 
     # 6. Save free RVs and convergence summary
     with open(os.path.join(output_dir, "free_variables.txt"), "w") as f:
-        f.write("=== Analytical RL-DDM Free RVs ===\n")
+        f.write(f"=== Analytical RL-DDM Free RVs ({group_label}) ===\n")
         for rv in model.pymc_model.free_RVs:
             f.write(f"  {rv}\n")
     # Sampled-scale rows (convergence: rl_alpha/a Intercepts and sigmas are on the logit scale),
@@ -562,3 +563,9 @@ if __name__ == "__main__":
     plot_ppc(model, idata, df, output_dir=plots_dir)
 
     print(f"\nAll outputs saved to: {output_dir}")
+
+
+if __name__ == "__main__":
+    run(data_path="../data/cleaned_rl_model_controls.csv",
+        run_name="rl_ddm_analytical",
+        group_label="Session 1, Controls")

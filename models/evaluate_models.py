@@ -526,7 +526,14 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Automatically select the right data CSV based on the folder name
-    if "rl_wald" in output_dir or "rl_ddm" in output_dir:
+    if "rl_ddm_analytical_session2_bupropion" in output_dir:
+        data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session2_bupropion.csv")
+    # Not in use: Session 2 Placebo and Session 1 Bupropion fits
+    # elif "rl_ddm_analytical_session2_placebo" in output_dir:
+    #     data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session2_placebo.csv")
+    # elif "rl_ddm_analytical_session1_bupropion" in output_dir:
+    #     data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session1_bupropion.csv")
+    elif "rl_wald" in output_dir or "rl_ddm" in output_dir:
         data_path = os.path.join(script_dir, "../data/cleaned_rl_model_controls.csv")
     elif "prior_success" in output_dir:
         data_path = os.path.join(script_dir, "../data/mid_session1_controls_hssm.csv")

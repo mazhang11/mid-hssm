@@ -9,7 +9,8 @@ import pandas as pd
 # from mid_patient_data_summary.csv, keyed on subject ID and session number.
 
 
-def load_patient_metadata(data_dir="../data", summary_filename="mid_patient_data_summary.csv"):
+def load_patient_metadata(data_dir="../data", summary_filename="mid_patient_data_summary.csv",
+                          require_response=True):
     """
     Loads mid_patient_data_summary.csv and reshapes it from wide format (one row per patient,
     separate Phase 1/Phase 2 columns) into long format (one row per patient x session),
@@ -19,7 +20,12 @@ def load_patient_metadata(data_dir="../data", summary_filename="mid_patient_data
         subject       - patient ID (matches trial CSVs)
         session       - integer session number (1 or 2)
         treatment     - 1 if Bupropion XL, 0 if Placebo
-        is_responder  - 1 if Responder, 0 if Non-Responder
+        is_responder  - 1 if Responder, 0 if Non-Responder (NaN if unknown and
+                        require_response=False)
+
+    By default a (patient, phase) is skipped when its Randomization or Response is missing.
+    With require_response=False only a missing Randomization skips it, so subjects whose
+    treatment arm is known but whose response status is not are kept.
     """
     summary_path = os.path.join(data_dir, summary_filename)
     if not os.path.exists(summary_path):
@@ -40,11 +46,14 @@ def load_patient_metadata(data_dir="../data", summary_filename="mid_patient_data
             (2, "Phase 2 Randomization", "Phase 2 Response"),
         ]:
             # Skip if either column is missing/NaN for this phase
-            if pd.isna(row.get(rand_col)) or pd.isna(row.get(resp_col)):
+            if pd.isna(row.get(rand_col)) or (require_response and pd.isna(row.get(resp_col))):
                 continue
 
             treatment_val = 1 if row[rand_col].strip() == "Bupropion XL" else 0
-            response_val  = 1 if row[resp_col].strip()  == "Responder"    else 0
+            if pd.isna(row.get(resp_col)):
+                response_val = float("nan")
+            else:
+                response_val = 1 if row[resp_col].strip() == "Responder" else 0
 
             records.append({
                 "subject":      row["ID"],
@@ -74,7 +83,7 @@ def load_and_clean_mid_data(data_dir="../data", output_filename="mid_data_cleane
         f for f in csv_files
         if output_filename not in f
         and "mid_patient_data_summary" not in f
-        and "cleaned_rl_model_controls" not in f
+        and "cleaned_rl_model" not in f
     ]
 
     if not csv_files:
@@ -192,7 +201,7 @@ def prepare_session1_controls(data_dir="../data", output_filename="mid_session1_
         if output_filename not in f
         and "mid_patient_data_summary" not in f
         and "mid_data_cleaned_hssm" not in f
-        and "cleaned_rl_model_controls" not in f
+        and "cleaned_rl_model" not in f
     ]
     if not csv_files:
         raise FileNotFoundError(f"No CSV files found in the directory: {data_dir}")
@@ -294,7 +303,7 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
 
     RLSSM needs every subject to have the same number of trials, contiguous and in
     trial order, so NO trials are dropped. Instead, invalid trials (TooFast, NoResponse /
-    missing RT, rt <= 0.15 s) are kept in the learning sequence and masked out of the
+    missing RT, rt < 0.20 s) are kept in the learning sequence and masked out of the
     likelihood by setting response = -1 (and a placeholder rt). This task has only one
     possible response, so -1 never occurs naturally; the masked decision process in
     rl_ddm.py contributes logp = 0 for those rows.
@@ -340,6 +349,16 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
     print(f"After controls-only filter (Placebo): {len(df)} trials "
           f"from {df['subject'].nunique()} subjects.")
 
+    return _finalize_rl_panel(df, output_path, "Session 1 Controls (RL)")
+
+
+def _finalize_rl_panel(df, output_path, title):
+    """
+    Shared final steps for the RL-DDM datasets: trial order, learning covariates, masking of
+    invalid trials, balanced-panel check, save. `df` holds one session's raw trials for the
+    chosen subjects (columns subject, session, run, trial, cue_type, out_type, RT, plus
+    any metadata columns).
+    """
     # 3. Sort into true trial order. Each raw CSV is one block (run = reward_1..reward_4),
     #    and the learned values carry over across blocks within the session.
     df = df.sort_values(['subject', 'run', 'trial'], kind='stable').reset_index(drop=True)
@@ -365,9 +384,12 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
     df['feedback'] = df['hit'] * df['cue_value'] / 5.0
     df['trial_idx'] = df.groupby('subject').cumcount() + 1
 
-    # 5. Mask invalid trials instead of dropping them
+    # 5. Mask invalid trials instead of dropping them. The RT floor is 0.20 s here (the non-RL
+    #    datasets use 0.15 s): the DDM cannot produce an RT below a subject's non-decision
+    #    time, so one anticipatory response just above 0.15 s walls off that subject's t and
+    #    makes the hierarchical fit diverge. No controls RT falls in 0.15-0.20 s.
     rt = df['RT'] / 1000.0
-    invalid = (df['out_type'] == 'TooFast') | rt.isna() | (rt <= 0.15)
+    invalid = (df['out_type'] == 'TooFast') | rt.isna() | (rt < 0.20)
     df['valid'] = (~invalid).astype(int)
     df['response'] = df['valid'].map({1: 1, 0: -1})
     df['rt'] = rt.where(df['valid'] == 1, 1.0)   # placeholder rt for masked rows
@@ -382,7 +404,7 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
     # 7. Save
     df.to_csv(output_path, index=False)
 
-    print(f"\nSession 1 Controls (RL) preprocessing complete")
+    print(f"\n{title} preprocessing complete")
     print(f"  Subjects:            {df['subject'].nunique()}")
     print(f"  Trials per subject:  {counts.iloc[0]}")
     print(f"  Masked trials:       {int(masked.sum())} total "
@@ -391,6 +413,100 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
     print(f"SUCCESS: Saved to '{output_path}'")
 
     return df
+
+
+# Raw block filenames: Placebo_MID_Reward_<ID>_session<S>_block<B>_<YYYY_Mon_DD>_<HHMM>.csv
+RAW_BLOCK_PATTERN = re.compile(
+    r"Placebo_MID_Reward_(?P<id>.+?)_session(?P<session>[\d.]+)_block(?P<block>\d)_"
+    r"(?P<date>\d{4}_[A-Za-z]{3}_\d{2})_\d{4}\.csv$"
+)
+
+
+def normalize_subject_id(raw_id):
+    """
+    Maps the raw IDs found in filenames onto the metadata IDs (e.g. 'PLAABC123'). Some raw
+    IDs carry a session suffix ('_2', '_02', '.2') or lack the 'PLA' prefix ('ABC123').
+    """
+    sid = re.split(r"[_.]", str(raw_id).strip().upper())[0]
+    if re.fullmatch(r"[A-Z]{3}\d{3}", sid):
+        sid = "PLA" + sid
+    return sid
+
+
+def load_raw_blocks(data_dir="../data"):
+    """
+    Reads every raw block file, taking subject, session and block from the FILENAME rather
+    than from the file's own columns, which are unreliable in places:
+      - subject IDs inside files are sometimes malformed ('_2' suffixes, bare numbers)
+      - session labels include 1.5, 2.5 and 20, and 4 subjects' second visits are
+        labelled session 1
+      - one file is tab-delimited
+    Session is assigned by visit order: a subject with two visit dates gets session 1 for
+    the earlier and 2 for the later (sessions are ~3 weeks apart); a subject with one visit
+    keeps the filename's label (1.5 -> 1, 2.5 -> 2).
+
+    Returns one row per trial with columns subject, session, run, trial, cue_type,
+    out_type, RT.
+    """
+    files = sorted(glob.glob(os.path.join(data_dir, "Placebo_MID_Reward_*.csv")))
+    if not files:
+        raise FileNotFoundError(f"No raw block CSV files found in the directory: {data_dir}")
+
+    frames = []
+    for f in files:
+        m = RAW_BLOCK_PATTERN.search(os.path.basename(f))
+        if m is None:
+            raise ValueError(f"Unexpected raw filename: {os.path.basename(f)}")
+        block = pd.read_csv(f, sep=None, engine="python")  # sniffs comma vs tab
+        block = block[['trial', 'cue_type', 'out_type', 'RT']].copy()
+        block['subject'] = normalize_subject_id(m['id'])
+        block['session_label'] = float(m['session'])
+        block['run'] = f"reward_{m['block']}"
+        block['date'] = pd.to_datetime(m['date'], format="%Y_%b_%d")
+        frames.append(block)
+    df = pd.concat(frames, ignore_index=True)
+
+    n_dates = df.groupby('subject')['date'].transform('nunique')
+    if n_dates.max() > 2:
+        raise ValueError("A subject has more than two visit dates; session assignment is ambiguous.")
+    visit = df.groupby('subject')['date'].rank(method='dense')
+    df['session'] = visit.where(n_dates == 2, df['session_label'] // 1).astype(int)
+
+    per_visit = df.groupby(['subject', 'session'])['run'].nunique()
+    if (per_visit != 4).any():
+        print(f"  WARNING: {int((per_visit != 4).sum())} (subject, session) pairs do not have 4 blocks.")
+    print(f"Loaded {len(files)} raw block files: {df['subject'].nunique()} subjects, "
+          f"{len(per_visit)} (subject, session) visits.")
+    return df[['subject', 'session', 'run', 'trial', 'cue_type', 'out_type', 'RT']]
+
+
+def prepare_rl_dataset(session, treatment, output_filename, data_dir="../data"):
+    """
+    Balanced-panel RL-DDM dataset for one session and one treatment arm
+    (treatment 0 = Placebo, 1 = Bupropion XL), with the same columns, trial order and
+    masking as prepare_session1_controls_rl. Raw files are read with load_raw_blocks
+    (IDs and sessions from the filenames). Subjects are kept when their arm for that
+    phase is known, even if their responder status is missing (is_responder = NaN).
+    """
+    arm = {0: "Placebo", 1: "Bupropion XL"}[treatment]
+    output_path = os.path.join(data_dir, output_filename)
+
+    df = load_raw_blocks(data_dir)
+    df = df[df['session'] == session].copy()
+    print(f"Session {session}: {len(df)} trials from {df['subject'].nunique()} subjects.")
+
+    meta_long = load_patient_metadata(data_dir=data_dir, require_response=False)
+    df = df.merge(meta_long, on=['subject', 'session'], how='left')
+    no_meta = df.loc[df['treatment'].isna(), 'subject'].nunique()
+    if no_meta:
+        print(f"  WARNING: {no_meta} subjects have no Phase {session} randomization and are dropped.")
+    df = df[df['treatment'] == treatment].copy()
+    print(f"After {arm} filter: {len(df)} trials from {df['subject'].nunique()} subjects "
+          f"({df.groupby('subject')['is_responder'].first().isna().sum()} with unknown responder status).")
+    if df.empty:
+        raise ValueError(f"No Session {session} {arm} subjects found.")
+
+    return _finalize_rl_panel(df, output_path, f"Session {session} {arm} (RL)")
 
 
 # --- Execution Block ---
@@ -403,3 +519,14 @@ if __name__ == "__main__":
 
     # Balanced-panel Session 1 controls dataset for the RL-DDM (rl_ddm.py)
     df_rl = prepare_session1_controls_rl()
+
+    # Same RL-DDM dataset for Session 2 Bupropion (rl_ddm_session2_bupropion.py)
+    df_rl_s2_bupropion = prepare_rl_dataset(session=2, treatment=1,
+                                            output_filename="cleaned_rl_model_session2_bupropion.csv")
+
+    # Not in use: Session 2 Placebo (rl_ddm_session2_placebo.py, 6 subjects) and
+    # Session 1 Bupropion (rl_ddm_session1_bupropion.py, 9 subjects)
+    # df_rl_s2_placebo = prepare_rl_dataset(session=2, treatment=0,
+    #                                       output_filename="cleaned_rl_model_session2_placebo.csv")
+    # df_rl_s1_bupropion = prepare_rl_dataset(session=1, treatment=1,
+    #                                         output_filename="cleaned_rl_model_session1_bupropion.csv")
