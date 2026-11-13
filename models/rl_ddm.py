@@ -434,22 +434,25 @@ def plot_posterior_diagnostics(idata, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     file_prefix = os.path.join(output_dir, "RL_DDM")
 
-    pc = az.plot_trace_dist(idata, var_names=GROUP_VARS)
+    # Every plot is on the natural scale (rl_alpha and a are sampled on the logit scale; the
+    # transform is monotone, so chain mixing reads the same). summary.csv keeps the sampled rows.
+    nat = group_params_natural(idata["posterior"].to_dataset())
+    natural = xr.DataTree.from_dict({"posterior": nat})
+    pc = az.plot_trace_dist(natural)
     pc.savefig(f"{file_prefix}_trace.png", dpi=150, bbox_inches='tight')
     plt.close('all')
 
-    # Marginals on the natural scale (rl_alpha and a are sampled on the logit scale)
-    natural = xr.DataTree.from_dict({"posterior": group_params_natural(idata["posterior"].to_dataset())})
     pc = az.plot_dist(natural)
     pc.savefig(f"{file_prefix}_marginals.png", dpi=300, bbox_inches='tight')
     plt.close('all')
 
-    # Main identifiability risks: learning rate vs value scaling vs baseline drift vs boundary.
-    # Shown on the sampled scale (logit for rl_alpha and a), where the sampler's geometry lives.
-    pc = az.plot_pair(idata, var_names=["rl_alpha_Intercept", "scaler_Intercept",
-                                        "v0_Intercept", "a_Intercept", "t_Intercept"])
-    pc.savefig(f"{file_prefix}_tradeoffs.png", dpi=300, bbox_inches='tight')
-    plt.close('all')
+    # Main identifiability risks: learning rate vs value scaling vs baseline drift vs boundary
+    # (density-contour pair plot, styled like prior_success's)
+    import plot_tradeoffs_natural as ptn
+    draws = {p: nat[f"{p}_group"].values.ravel() for p in FREE_PARAMS}
+    ptn.pair_plot(draws, {p: ptn.padded_range(draws[p], PARAM_BOUNDS[p]) for p in draws},
+                  "RL-DDM: parameter tradeoffs, group level (natural scale)",
+                  f"{file_prefix}_tradeoffs.png")
     print("  Saved trace, marginal and tradeoff plots.")
 
 
