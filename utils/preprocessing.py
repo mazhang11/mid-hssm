@@ -361,9 +361,11 @@ def _finalize_rl_panel(df, output_path, title):
     """
     # 3. Sort into true trial order. Each raw CSV is one block (run = reward_1..reward_4),
     #    and the learned values carry over across blocks within the session.
-    df = df.sort_values(['subject', 'run', 'trial'], kind='stable').reset_index(drop=True)
-    if df.duplicated(['subject', 'run', 'trial']).any():
-        raise ValueError("Duplicate (subject, run, trial) rows found.")
+    #    Each (subject, session) is its own learning sequence; for single-session datasets
+    #    the extra 'session' key changes nothing.
+    df = df.sort_values(['subject', 'session', 'run', 'trial'], kind='stable').reset_index(drop=True)
+    if df.duplicated(['subject', 'session', 'run', 'trial']).any():
+        raise ValueError("Duplicate (subject, session, run, trial) rows found.")
 
     # 4. Learning covariates, computed on the full sequence
     cue_mapping = {
@@ -382,7 +384,7 @@ def _finalize_rl_panel(df, output_path, title):
     hit_types = {'NoIncentive', 'Quarters', 'Dollar', 'FiveDollars'}
     df['hit'] = df['out_type'].astype(str).str.strip().isin(hit_types).astype(int)
     df['feedback'] = df['hit'] * df['cue_value'] / 5.0
-    df['trial_idx'] = df.groupby('subject').cumcount() + 1
+    df['trial_idx'] = df.groupby(['subject', 'session']).cumcount() + 1
 
     # 5. Mask invalid trials instead of dropping them. The RT floor is 0.20 s here (the non-RL
     #    datasets use 0.15 s): the DDM cannot produce an RT below a subject's non-decision
@@ -396,19 +398,20 @@ def _finalize_rl_panel(df, output_path, title):
     df = df.drop(columns=['RT'])
 
     # 6. Balanced-panel check
-    counts = df.groupby('subject').size()
+    #    (one panel unit = one subject's session)
+    counts = df.groupby(['subject', 'session']).size()
     if counts.nunique() != 1:
-        raise ValueError(f"Unbalanced panel: trial counts per subject = {counts.value_counts().to_dict()}")
-    masked = (1 - df['valid']).groupby(df['subject']).sum()
+        raise ValueError(f"Unbalanced panel: trial counts per (subject, session) = {counts.value_counts().to_dict()}")
+    masked = (1 - df['valid']).groupby([df['subject'], df['session']]).sum()
 
     # 7. Save
     df.to_csv(output_path, index=False)
 
     print(f"\n{title} preprocessing complete")
-    print(f"  Subjects:            {df['subject'].nunique()}")
-    print(f"  Trials per subject:  {counts.iloc[0]}")
+    print(f"  Subjects:            {df['subject'].nunique()}  ({len(counts)} subject x session units)")
+    print(f"  Trials per unit:     {counts.iloc[0]}")
     print(f"  Masked trials:       {int(masked.sum())} total "
-          f"(per subject min {int(masked.min())}, max {int(masked.max())})")
+          f"(per unit min {int(masked.min())}, max {int(masked.max())})")
     print(f"  Columns: {list(df.columns)}")
     print(f"SUCCESS: Saved to '{output_path}'")
 
@@ -509,6 +512,40 @@ def prepare_rl_dataset(session, treatment, output_filename, data_dir="../data"):
     return _finalize_rl_panel(df, output_path, f"Session {session} {arm} (RL)")
 
 
+def prepare_rl_dataset_all(output_filename="cleaned_rl_model_all.csv", data_dir="../data"):
+    """
+    Balanced-panel RL-DDM dataset with EVERY subject and BOTH sessions, for the
+    session x drug model in models/rl_ddm_all.py. Same trial order, learning covariates
+    and masking as prepare_rl_dataset. One panel unit is one subject's session: the learner
+    restarts at Q = 0 each session (the cue -> reward mapping is reversed in session 2).
+
+    Kept: every (subject, session) whose Phase randomization is known (responder status
+    may be missing). Visits with no randomization in the metadata are dropped.
+
+    Adds:
+      - unit:     "<subject>_s<session>", the RLSSM panel id (rows contiguous per unit)
+      - session2: 1 for session 2, 0 for session 1 (covariate)
+      - treatment is already there: 1 Bupropion XL, 0 Placebo (covariate)
+    """
+    output_path = os.path.join(data_dir, output_filename)
+
+    df = load_raw_blocks(data_dir)
+    meta_long = load_patient_metadata(data_dir=data_dir, require_response=False)
+    df = df.merge(meta_long, on=['subject', 'session'], how='left')
+    no_meta = df.loc[df['treatment'].isna(), ['subject', 'session']].drop_duplicates()
+    if len(no_meta):
+        print(f"  WARNING: {len(no_meta)} (subject, session) visits have no randomization and are dropped.")
+    df = df.dropna(subset=['treatment']).copy()
+    df['treatment'] = df['treatment'].astype(int)
+    df['session2'] = (df['session'] == 2).astype(int)
+    df['unit'] = df['subject'] + "_s" + df['session'].astype(str)
+
+    cells = df.drop_duplicates(['subject', 'session']).groupby(['session', 'treatment']).size()
+    print("Units per (session, treatment):\n" + cells.to_string())
+
+    return _finalize_rl_panel(df, output_path, "All subjects, both sessions (RL)")
+
+
 # --- Execution Block ---
 if __name__ == "__main__":
     # Run the full dataset preprocessing
@@ -523,6 +560,9 @@ if __name__ == "__main__":
     # Same RL-DDM dataset for Session 2 Bupropion (rl_ddm_session2_bupropion.py)
     df_rl_s2_bupropion = prepare_rl_dataset(session=2, treatment=1,
                                             output_filename="cleaned_rl_model_session2_bupropion.csv")
+
+    # Every subject, both sessions, with session and treatment covariates (rl_ddm_all.py)
+    df_rl_all = prepare_rl_dataset_all()
 
     # Not in use: Session 2 Placebo (rl_ddm_session2_placebo.py, 6 subjects) and
     # Session 1 Bupropion (rl_ddm_session1_bupropion.py, 9 subjects)

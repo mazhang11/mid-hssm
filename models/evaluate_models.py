@@ -50,6 +50,10 @@ def rebuild_model(trace, df, model_name):
             # it registers the RL model and sets floatX to float32)
             import rl_wald
             model = rl_wald.build_model(df)
+        elif "rl_ddm_all" in model_name:
+            # Session x drug RL-DDM on every subject and session; spec in rl_ddm_all.build_model
+            import rl_ddm_all
+            model = rl_ddm_all.build_model(df)
         elif "rl_ddm_analytical" in model_name:
             # RLSSM with the analytical DDM (hssm >= 0.5.1); spec lives in rl_ddm.build_model
             import rl_ddm
@@ -526,7 +530,9 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Automatically select the right data CSV based on the folder name
-    if "rl_ddm_analytical_session2_bupropion" in output_dir:
+    if "rl_ddm_all" in output_dir:
+        data_path = os.path.join(script_dir, "../data/cleaned_rl_model_all.csv")
+    elif "rl_ddm_analytical_session2_bupropion" in output_dir:
         data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session2_bupropion.csv")
     # Not in use: Session 2 Placebo and Session 1 Bupropion fits
     # elif "rl_ddm_analytical_session2_placebo" in output_dir:
