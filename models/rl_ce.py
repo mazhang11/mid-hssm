@@ -36,6 +36,7 @@ Usage (from models/):
   python rl_ce.py ../outputs/<run>     re-make plots from a saved trace
 """
 
+import os
 import numpy as np
 import jax.numpy as jnp
 from jax.lax import scan
@@ -116,8 +117,31 @@ def gamma_param(intercept_sigma=1.0, subject_sigma=0.5):
     )
 
 
+# Where sampling starts (priors are unchanged). The first runs started every chain at the prior
+# centers with t = 0.15, and most chains never left: at that start the log density is about
+# -5,600 (healthy posterior about +12,400), and the stuck chains ended with t 0.215-0.248
+# (healthy 0.261) and alpha still at its starting value, with step sizes ~1e-6.
+# t = 0.19 alone lifts the start to about +400 while staying 12 ms below the fastest valid RT
+# (0.202 s), so no trial is floored at the start. alpha, scaler, v0 and a start at rl_ddm's
+# 10-29 Session 1 posterior. RL_DDM_PRIOR_START=1 restores the old start (Jobs 9372776, 9393765).
+START = {"rl_alpha": 0.067, "scaler": 1.3, "v0": 6.7, "a": 0.73, "t": 0.19}
+
+
+def logit_param_start(name, center, start, intercept_sigma=1.0, subject_sigma=0.5):
+    """rl_ddm.logit_param (prior centered at `center`), but sampling starts at `start`."""
+    p = logit_param(name, center, intercept_sigma, subject_sigma)
+    lower, upper = PARAM_BOUNDS[name]
+    p.prior["Intercept"]["initval"] = float(np.log((start - lower) / (upper - start)))
+    return p
+
+
 def build_model(df):
-    """rl_ddm.build_model's parameters and priors + gamma. evaluate_models.py imports this."""
+    """rl_ddm.build_model's parameters and priors + gamma. evaluate_models.py imports this.
+    Starting values: START (see above), unless RL_DDM_PRIOR_START=1."""
+    if os.environ.get("RL_DDM_PRIOR_START") == "1":
+        start = {"rl_alpha": 0.2, "scaler": 1.0, "v0": 6.0, "a": 0.65, "t": 0.15}
+    else:
+        start = START
     return hssm.RLSSM(
         data=df,
         model_config=get_rlssm_model_config(MODEL_NAME),
@@ -126,12 +150,12 @@ def build_model(df):
         lapse=None,
         process_initvals=False,
         include=[
-            logit_param("rl_alpha", center=0.2),
-            hierarchical_param("scaler", -5.0, 20.0, 1.0, 3.0, 1.0),
-            hierarchical_param("v0", 0.1, 20.0, 6.0, 3.0, 1.5),
+            logit_param_start("rl_alpha", center=0.2, start=start["rl_alpha"]),
+            hierarchical_param("scaler", -5.0, 20.0, 1.0, 3.0, 1.0, initval=start["scaler"]),
+            hierarchical_param("v0", 0.1, 20.0, 6.0, 3.0, 1.5, initval=start["v0"]),
             gamma_param(),
-            logit_param("a", center=0.65),
-            hierarchical_param("t", 0.05, 0.6, 0.25, 0.1, 0.05, initval=0.15),
+            logit_param_start("a", center=0.65, start=start["a"]),
+            hierarchical_param("t", 0.05, 0.6, 0.25, 0.1, 0.05, initval=start["t"]),
             hssm.Param("z", prior=0.5),
         ],
     )

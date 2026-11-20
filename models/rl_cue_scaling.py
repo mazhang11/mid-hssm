@@ -457,3 +457,37 @@ def main(spec):
         replot(spec, sys.argv[1].rstrip("/"))
     else:
         run(spec)
+
+
+# ---------------------------------------------------------------------------
+# The linear baseline (rl_ddm.py) as a Spec, so its saved runs get the same plots
+# ---------------------------------------------------------------------------
+
+RL_DDM_SPEC = Spec(
+    run_name="rl_ddm_analytical",          # trace: rl_ddm_analytical_model_trace.nc
+    title="linear cue scaling (rl_ddm)",
+    free_params=rl_ddm.FREE_PARAMS,
+    bounds=rl_ddm.PARAM_BOUNDS,
+    logit_params=rl_ddm.LOGIT_PARAMS,
+    cue_values=lambda params: np.broadcast_to(DOLLARS / DOLLARS.max(), (len(params["rl_alpha"]), N_CUES)),
+    build_model=rl_ddm.build_model,
+)
+
+
+if __name__ == "__main__":
+    # python rl_cue_scaling.py ../outputs/<rl_ddm_analytical run>
+    # Adds the median-split posterior predictive plots (param_split/ppc_rt_dist_<p>_split.png)
+    # to a Session 1 controls rl_ddm run; its other plots come from rl_ddm.py and the plot_* scripts.
+    if len(sys.argv) != 2 or "rl_ddm_analytical" not in sys.argv[1]:
+        sys.exit("Usage: python rl_cue_scaling.py ../outputs/<rl_ddm_analytical run>")
+    run_dir = sys.argv[1].rstrip("/")
+    idata = az.from_netcdf(os.path.join(run_dir, "models", RL_DDM_SPEC.trace_name))
+    df = load_data(RL_DDM_SPEC)
+    fitted = set(str(s) for s in idata["posterior"]["subject__factor_dim"].values)
+    df = df[df["subject"].astype(str).isin(fitted)].reset_index(drop=True)
+    dv, pred = valid_predictions(idata, df)
+    out = os.path.join(run_dir, "plots", "param_split")
+    os.makedirs(out, exist_ok=True)
+    med = split_table(RL_DDM_SPEC, idata["posterior"].to_dataset(), list(pd.unique(dv["subject"])))
+    for p, pname in SPLITS:
+        print("Saved", plot_split_ppc(RL_DDM_SPEC, dv, pred, med, p, pname, out))
