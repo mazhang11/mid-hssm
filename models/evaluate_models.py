@@ -54,6 +54,14 @@ def rebuild_model(trace, df, model_name):
             # Session x drug RL-DDM on every subject and session; spec in rl_ddm_all.build_model
             import rl_ddm_all
             model = rl_ddm_all.build_model(df)
+        elif "rl_cl" in model_name:
+            # RL-DDM with log cue scaling; spec in rl_cl.build_model
+            import rl_cl
+            model = rl_cl.build_model(df)
+        elif "rl_ce" in model_name:
+            # RL-DDM with power cue scaling (fitted exponent gamma); spec in rl_ce.build_model
+            import rl_ce
+            model = rl_ce.build_model(df)
         elif "rl_ddm_analytical" in model_name:
             # RLSSM with the analytical DDM (hssm >= 0.5.1); spec lives in rl_ddm.build_model
             import rl_ddm
@@ -453,7 +461,7 @@ def run_evaluation(output_dir, data_path):
         # Evaluate the posterior predictive on valid trials only, on both sides.
         ppc_dt, ppc_df = None, df
         if "valid" in df.columns and "posterior_predictive" in model.traces:
-            if "rl_ddm" in label:
+            if any(k in label for k in ("rl_ddm", "rl_cl", "rl_ce")):
                 import rl_ddm as rl_module
             else:
                 import rl_wald as rl_module
@@ -539,7 +547,7 @@ if __name__ == "__main__":
     #     data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session2_placebo.csv")
     # elif "rl_ddm_analytical_session1_bupropion" in output_dir:
     #     data_path = os.path.join(script_dir, "../data/cleaned_rl_model_session1_bupropion.csv")
-    elif "rl_wald" in output_dir or "rl_ddm" in output_dir:
+    elif any(k in os.path.basename(output_dir) for k in ("rl_wald", "rl_ddm", "rl_cl", "rl_ce")):
         data_path = os.path.join(script_dir, "../data/cleaned_rl_model_controls.csv")
     elif "prior_success" in output_dir:
         data_path = os.path.join(script_dir, "../data/mid_session1_controls_hssm.csv")

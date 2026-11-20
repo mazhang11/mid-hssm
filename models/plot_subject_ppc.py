@@ -41,7 +41,7 @@ CUE_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]          # categorical
 Q_COLORS = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"]   # ordinal blue ramp
 PARAM_LABELS = {"rl_alpha": "Learning rate (α)", "scaler": "Value → drift scaling",
                 "v0": "Baseline drift (v0)", "a": "Boundary separation (a)",
-                "t": "Non-decision time (t, s)"}
+                "t": "Non-decision time (t, s)", "gamma": "Reward exponent (γ)"}
 
 plt.rcParams.update({
     "font.size": 9, "axes.titlesize": 9, "axes.labelsize": 9,
