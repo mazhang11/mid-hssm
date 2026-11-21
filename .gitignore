@@ -13,3 +13,6 @@ __pycache__/
 
 # Ignore logs
 utils/logs/*.txt
+
+# Archived outputs (traces are large)
+archive/outputs/
