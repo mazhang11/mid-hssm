@@ -19,11 +19,13 @@ Writes to <run>/plots/param_split/:
   param_split_subjects.csv      per-subject medians and group labels (S-keys as elsewhere)
   param_split_behavior.csv      group x block x cue observed means and SEs
 
-Usage: cd models && python plot_param_split.py [../outputs/<rl_run>]
+Usage: cd models && python evaluation/plot_param_split.py [../outputs/<rl_run>]
 """
 
 import os
 import sys
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import pandas as pd
 import arviz as az
@@ -37,7 +39,7 @@ import plot_subject_ppc as sp
 import rl_ddm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RL_RUN = os.path.join(HERE, "..", "outputs", "rl_ddm_analytical_2026-10-29_Job8086695")
+RL_RUN = os.path.join(HERE, "..", "..", "outputs", "rl_ddm_analytical_2026-10-29_Job8086695")
 SPLITS = [("rl_alpha", "Learning rate"), ("scaler", "Value-to-drift scaling")]
 GROUP_STYLE = {"Low": sp.MUTED, "High": sp.INK}      # ordered split: light ink -> dark ink
 CUES = rl_ddm.CUE_LABELS

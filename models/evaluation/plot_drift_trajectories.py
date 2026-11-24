@@ -22,11 +22,13 @@ Writes to <run>/plots/drift_trajectories/:
   drift_advantage_subjects_p*.png   same, as v[cue] - v[neutral] with 90% bands (shared y-axis)
   drift_trajectories_median.csv     per unit x trial x cue posterior median drift
 
-Usage: cd models && python plot_drift_trajectories.py ../outputs/<run_folder>
+Usage: cd models && python evaluation/plot_drift_trajectories.py ../outputs/<run_folder>
 """
 
 import os
 import sys
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import pandas as pd
 import arviz as az
@@ -53,7 +55,7 @@ def load_run(run_dir, seed=0):
     if is_all:
         import rl_ddm_all as m
         idata = az.from_netcdf(os.path.join(run_dir, "models", m.TRACE_NAME))
-        df = m.load_data(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data",
+        df = m.load_data(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data",
                                       "cleaned_rl_model_all.csv"))
     else:
         idata = az.from_netcdf(os.path.join(run_dir, "models", "rl_ddm_analytical_model_trace.nc"))
@@ -240,5 +242,5 @@ def main(run_dir):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("Usage: python plot_drift_trajectories.py ../outputs/<run_folder>")
+        sys.exit("Usage: python evaluation/plot_drift_trajectories.py ../outputs/<run_folder>")
     main(sys.argv[1].rstrip("/"))

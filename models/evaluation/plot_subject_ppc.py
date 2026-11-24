@@ -14,11 +14,13 @@ holds the hand-simulated posterior_predictive group) and writes to <run>/plots/s
 Only valid trials are used on both sides (masked trials have no observed RT), and simulated
 lower-boundary hits, which this one-response task cannot produce, are dropped.
 
-Usage: cd models && python plot_subject_ppc.py ../outputs/<run_folder>
+Usage: cd models && python evaluation/plot_subject_ppc.py ../outputs/<run_folder>
 """
 
 import os
 import sys
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import pandas as pd
 import arviz as az
@@ -57,8 +59,8 @@ def data_path_for(run_dir):
     here = os.path.dirname(os.path.abspath(__file__))
     for key in ["session2_bupropion", "session2_placebo", "session1_bupropion"]:
         if key in run_dir:
-            return os.path.join(here, f"../data/cleaned_rl_model_{key}.csv")
-    return os.path.join(here, "../data/cleaned_rl_model_controls.csv")
+            return os.path.join(here, f"../../data/cleaned_rl_model_{key}.csv")
+    return os.path.join(here, "../../data/cleaned_rl_model_controls.csv")
 
 
 def group_label_for(run_dir):
@@ -275,7 +277,7 @@ def main(run_dir):
         import arviz as _az
         import rl_ddm_all
         idata = _az.from_netcdf(os.path.join(run_dir, "models", rl_ddm_all.TRACE_NAME))
-        df = rl_ddm_all.load_data(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data",
+        df = rl_ddm_all.load_data(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data",
                                                "cleaned_rl_model_all.csv"))
         fitted = set(str(s) for s in idata["posterior"]["subject__factor_dim"].values)
         df = df[df["subject"].astype(str).isin(fitted)].reset_index(drop=True)
@@ -305,5 +307,5 @@ def main(run_dir):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("Usage: python plot_subject_ppc.py ../outputs/<run_folder>")
+        sys.exit("Usage: python evaluation/plot_subject_ppc.py ../outputs/<run_folder>")
     main(sys.argv[1].rstrip("/"))

@@ -23,7 +23,9 @@ Decision process ("ddm_analytical_masked"):
 Masking:
   RLSSM needs a balanced panel, so no trials are dropped (see
   preprocessing.prepare_session1_controls_rl). Invalid trials (TooFast, NoResponse,
-  rt < 0.20 s) stay in the learning sequence with their real feedback but are coded
+  rt < 0.20 s, and isolated anticipations: a subject's fastest RT under 0.30 s and more than
+  50 ms below their next-fastest, column `anticipation`) stay in the learning sequence with
+  their real feedback but are coded
   response = -1 and contribute logp = 0. The built-in analytical "ddm" would score those
   rows as lower-boundary responses, hence the masked wrapper. p_outlier = 0 so they
   contribute exactly 0.
@@ -49,6 +51,8 @@ Posterior predictive:
 import os
 import sys
 import datetime
+# Plot and evaluation helpers live in models/evaluation/
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "evaluation"))
 import numpy as np
 import pandas as pd
 import xarray as xr

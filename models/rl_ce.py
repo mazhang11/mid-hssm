@@ -121,8 +121,10 @@ def gamma_param(intercept_sigma=1.0, subject_sigma=0.5):
 # centers with t = 0.15, and most chains never left: at that start the log density is about
 # -5,600 (healthy posterior about +12,400), and the stuck chains ended with t 0.215-0.248
 # (healthy 0.261) and alpha still at its starting value, with step sizes ~1e-6.
-# t = 0.19 alone lifts the start to about +400 while staying 12 ms below the fastest valid RT
-# (0.202 s), so no trial is floored at the start. alpha, scaler, v0 and a start at rl_ddm's
+# t = 0.19 alone lifts the start to about +400 while staying below the fastest valid RT, so no
+# trial is floored at the start (12 ms below 0.202 s then; 46 ms below 0.236 s since the
+# anticipations at 0.202 / 0.219 / 0.236 s are masked in preprocessing, which also removes the
+# floor cliff that froze chain 2 of Job 9395542). alpha, scaler, v0 and a start at rl_ddm's
 # 10-29 Session 1 posterior. RL_DDM_PRIOR_START=1 restores the old start (Jobs 9372776, 9393765).
 START = {"rl_alpha": 0.067, "scaler": 1.3, "v0": 6.7, "a": 0.73, "t": 0.19}
 

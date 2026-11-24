@@ -23,11 +23,13 @@ Per split, two figures (rows: Low / High group; columns: Neutral, Small, Medium,
 
 Writes to <run>/plots/param_split/.
 
-Usage: cd models && python plot_param_split_trials.py [../outputs/<rl_run>]
+Usage: cd models && python evaluation/plot_param_split_trials.py [../outputs/<rl_run>]
 """
 
 import os
 import sys
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import pandas as pd
 import arviz as az

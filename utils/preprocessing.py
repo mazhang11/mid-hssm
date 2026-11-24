@@ -303,8 +303,9 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
 
     RLSSM needs every subject to have the same number of trials, contiguous and in
     trial order, so NO trials are dropped. Instead, invalid trials (TooFast, NoResponse /
-    missing RT, rt < 0.20 s) are kept in the learning sequence and masked out of the
-    likelihood by setting response = -1 (and a placeholder rt). This task has only one
+    missing RT, rt < 0.20 s, and isolated anticipations: a subject's fastest RT more than
+    50 ms below their next-fastest and under 0.30 s) are kept in the learning sequence and
+    masked out of the likelihood by setting response = -1 (and a placeholder rt). This task has only one
     possible response, so -1 never occurs naturally; the masked decision process in
     rl_ddm.py contributes logp = 0 for those rows.
 
@@ -352,6 +353,34 @@ def prepare_session1_controls_rl(data_dir="../data", output_filename="cleaned_rl
     return _finalize_rl_panel(df, output_path, "Session 1 Controls (RL)")
 
 
+ANTICIPATION_GAP = 0.050      # s below the unit's next-fastest valid RT
+ANTICIPATION_MAX_RT = 0.300   # s; only RTs below this can be anticipations
+
+
+def _flag_anticipations(rt, keys, gap=ANTICIPATION_GAP, max_rt=ANTICIPATION_MAX_RT):
+    """1 for isolated anticipatory responses, else 0 (aligned with rt).
+
+    Within each panel unit (keys, e.g. subject x session), the fastest RT is flagged if it is
+    below `max_rt` AND more than `gap` below the next-fastest RT. The check repeats on the
+    remaining RTs until the fastest one passes, so only an isolated lower tail is caught, never a
+    gap higher up in the distribution. NaN RTs (already invalid) are ignored.
+
+    Why `max_rt`: without it the gap rule also catches slow subjects' sparse lower tails
+    (in the Session 1 controls, two slow subjects at 371-601 ms, medians 736-886 ms). Those
+    RTs are far above the subjects' t and are real responses. The anticipations it should catch
+    are all <= 236 ms (next-fastest RTs 269-302 ms). Two anticipations within `gap` of each other
+    are not caught: the rule checks isolation, not only an absolute cutoff.
+    """
+    flag = pd.Series(0, index=rt.index)
+    for _, r in rt.dropna().groupby(keys):
+        r = r.sort_values()
+        i = 0
+        while i + 1 < len(r) and r.iloc[i] < max_rt and r.iloc[i] < r.iloc[i + 1] - gap:
+            flag[r.index[i]] = 1
+            i += 1
+    return flag
+
+
 def _finalize_rl_panel(df, output_path, title):
     """
     Shared final steps for the RL-DDM datasets: trial order, learning covariates, masking of
@@ -392,6 +421,15 @@ def _finalize_rl_panel(df, output_path, title):
     #    makes the hierarchical fit diverge. No controls RT falls in 0.15-0.20 s.
     rt = df['RT'] / 1000.0
     invalid = (df['out_type'] == 'TooFast') | rt.isna() | (rt < 0.20)
+    #    Isolated anticipations are masked too (see _flag_anticipations): a valid RT more than
+    #    ANTICIPATION_GAP below the unit's next-fastest valid RT. With p_outlier = 0 such a trial
+    #    sits below the subject's likely t, where HSSM floors its logp at -66.1. That floor
+    #    gives the sampler a cliff (stuck chains) and a choice between modes (fit the trial vs.
+    #    give it up), which split the rl_ce chains in Job 9395542.
+    df['anticipation'] = _flag_anticipations(rt.where(~invalid), [df['subject'], df['session']])
+    antic = df.loc[df['anticipation'] == 1, ['subject', 'session', 'trial_idx', 'cue_type']]
+    antic = antic.assign(rt_ms=rt[df['anticipation'] == 1] * 1000)
+    invalid = invalid | (df['anticipation'] == 1)
     df['valid'] = (~invalid).astype(int)
     df['response'] = df['valid'].map({1: 1, 0: -1})
     df['rt'] = rt.where(df['valid'] == 1, 1.0)   # placeholder rt for masked rows
@@ -412,6 +450,11 @@ def _finalize_rl_panel(df, output_path, title):
     print(f"  Trials per unit:     {counts.iloc[0]}")
     print(f"  Masked trials:       {int(masked.sum())} total "
           f"(per unit min {int(masked.min())}, max {int(masked.max())})")
+    print(f"  Anticipations masked (< {ANTICIPATION_MAX_RT * 1000:.0f} ms and > {ANTICIPATION_GAP * 1000:.0f} ms "
+          f"below next-fastest RT): {len(antic)}")
+    for _, r in antic.iterrows():
+        print(f"    {r['subject']} session {r['session']} trial {r['trial_idx']} ({r['cue_type']}): "
+              f"{r['rt_ms']:.1f} ms")
     print(f"  Columns: {list(df.columns)}")
     print(f"SUCCESS: Saved to '{output_path}'")
 

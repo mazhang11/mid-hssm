@@ -22,6 +22,8 @@ Example:
 
 import sys
 import os
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import glob
 import numpy as np
 import pandas as pd
@@ -535,7 +537,7 @@ if __name__ == "__main__":
         print(f"ERROR: Output folder '{output_dir}' does not exist.")
         sys.exit(1)
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # models/
 
     # Automatically select the right data CSV based on the folder name
     if "rl_ddm_all" in output_dir:

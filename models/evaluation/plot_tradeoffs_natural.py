@@ -17,11 +17,13 @@ Writes to <run>/plots/:
                                             v_Intercept and a_Intercept (union of both
                                             posteriors), for side-by-side reading
 
-Usage: cd models && python plot_tradeoffs_natural.py ../outputs/<rl_run> [../outputs/<prior_success_run>]
+Usage: cd models && python evaluation/plot_tradeoffs_natural.py ../outputs/<rl_run> [../outputs/<prior_success_run>]
 """
 
 import os
 import sys
+# models/ holds rl_ddm, rl_cl, rl_ce and rl_cue_scaling; make them importable from evaluation/
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import arviz as az
 from scipy.stats import gaussian_kde
@@ -35,7 +37,7 @@ import plot_subject_ppc as sp
 import rl_ddm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PS_RUN = os.path.join(HERE, "..", "outputs", "prior_success_2026-05-12_v1")
+PS_RUN = os.path.join(HERE, "..", "..", "outputs", "prior_success_2026-05-12_v1")
 PAD = 0.15
 HDI_LEVELS = [0.95, 0.80, 0.50]                 # outer -> inner
 FILLS = ["#c6dcf7", "#5598e7", "#104281"]       # one blue hue, light -> dark (sequential)
