@@ -66,6 +66,8 @@ GROUPS = ["Low", "High"]
 # rl_ddm's 10-29 fit diverged 7.9% of the time at 0.9 on the rl_alpha x scaler ridge (FAQ.md),
 # so these runs default to 0.95 like rl_ddm_all. Override: RL_DDM_TARGET_ACCEPT.
 TARGET_ACCEPT = 0.95
+# RL_DDM_DENSE_MASS=1: numpyro learns a dense mass matrix (all parameter covariances) during
+# warmup instead of a diagonal one, for the scaler x rl_alpha ridge (FAQ.md). Off by default.
 
 
 @dataclass
@@ -425,13 +427,16 @@ def run(spec):
     draws = int(os.environ.get("RL_DDM_DRAWS", "200" if smoke else "1000"))
     chains = int(os.environ.get("RL_DDM_CHAINS", "1" if smoke else "4"))
     target_accept = float(os.environ.get("RL_DDM_TARGET_ACCEPT", TARGET_ACCEPT))
+    dense_mass = os.environ.get("RL_DDM_DENSE_MASS") == "1"
     print("\n" + "=" * 60)
     print(f" Fitting {spec.prefix}: RL-DDM, {spec.title} ({GROUP_LABEL})")
-    print(f" {chains} chains x {tune} tune / {draws} draws, target_accept {target_accept}")
+    print(f" {chains} chains x {tune} tune / {draws} draws, target_accept {target_accept}, "
+          f"{'dense' if dense_mass else 'diagonal'} mass matrix")
     print("=" * 60)
     model = spec.build_model(df)
+    # nuts= reaches numpyro's NUTS kernel (HSSM -> bambi -> pm.sample(nuts=...))
     model.sample(sampler="numpyro", tune=tune, draws=draws, chains=chains, cores=chains,
-                 target_accept=target_accept)
+                 target_accept=target_accept, nuts={"dense_mass": dense_mass})
     idata = model.traces
 
     output_dir = output_dir_for(spec, smoke)

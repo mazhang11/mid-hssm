@@ -22,6 +22,7 @@ speed up relative to the large cue.
 
 Free parameters, all ~ 1 + (1|subject):
   rl_alpha (logit), scaler, v0, a (logit), t      as in rl_ddm
+  scaler   as in rl_ddm, but bounded (-20, 20) instead of (-5, 20) (see SCALER_BOUNDS)
   gamma    logit link over (0, 3); group prior Normal(logit-scale value of gamma = 1, 1),
            i.e. ~95% prior mass on gamma in (0.2, 2.3); starts at gamma = 1; subject
            sigma ~ HalfNormal(0.5) on the logit scale, like rl_alpha and a
@@ -54,7 +55,12 @@ CUE_FRAC = rcs.DOLLARS / rcs.DOLLARS.max()                 # by cue_idx: 0, 0.1,
 
 GAMMA_BOUNDS = (0.0, 3.0)
 GAMMA_CENTER = 1.0
-CE_LEARNING_BOUNDS = {**LEARNING_BOUNDS, "gamma": GAMMA_BOUNDS}
+# scaler's bound is (-5, 20) in rl_ddm. One subject's scaler is negative (rl_ce 2026-11-25 median
+# -2.15, 89% down to -4.1); subject values past the bound get HSSM's floored likelihood, a wall
+# that drew a share of that fit's 18.7% divergences (FAQ.md). (-20, 20) keeps the wall ~10 group
+# SDs away. Being tested here first; rl_ddm and rl_cl still use (-5, 20).
+SCALER_BOUNDS = (-20.0, 20.0)
+CE_LEARNING_BOUNDS = {**LEARNING_BOUNDS, "scaler": SCALER_BOUNDS, "gamma": GAMMA_BOUNDS}
 CE_LEARNING_DEFAULTS = LEARNING_DEFAULTS + [GAMMA_CENTER]
 FREE_PARAMS = ["rl_alpha", "scaler", "v0", "gamma", "a", "t"]
 PARAM_BOUNDS = {**CE_LEARNING_BOUNDS, **DDM_BOUNDS}
@@ -153,7 +159,7 @@ def build_model(df):
         process_initvals=False,
         include=[
             logit_param_start("rl_alpha", center=0.2, start=start["rl_alpha"]),
-            hierarchical_param("scaler", -5.0, 20.0, 1.0, 3.0, 1.0, initval=start["scaler"]),
+            hierarchical_param("scaler", *SCALER_BOUNDS, 1.0, 3.0, 1.0, initval=start["scaler"]),
             hierarchical_param("v0", 0.1, 20.0, 6.0, 3.0, 1.5, initval=start["v0"]),
             gamma_param(),
             logit_param_start("a", center=0.65, start=start["a"]),
